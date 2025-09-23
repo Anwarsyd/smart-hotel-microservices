@@ -1,0 +1,12 @@
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, DateTime, Boolean
+from datetime import datetime
+
+Base = declarative_base()
+
+class TimestampMixin:
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class SoftDeleteMixin:
+    is_active = Column(Boolean, default=True)
