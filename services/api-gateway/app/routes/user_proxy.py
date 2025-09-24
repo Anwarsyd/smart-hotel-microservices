@@ -13,3 +13,8 @@ async def get_user(user_id: int):
             return response.json()
         except httpx.HTTPError as e:
             raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/test")
+def test():
+    return {"message": "User proxy works"}

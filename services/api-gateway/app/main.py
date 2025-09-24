@@ -13,5 +13,9 @@ app.include_router(user_proxy.router, prefix="/users")
 def root():
     return {"message": "Welcome to Smart Hotel API Gateway"}
 
+@app.get("/health")
+def health_check():
+    return {"status": "ok"}
+
 setup_cors(app)
 app.middleware("http")(log_requests)

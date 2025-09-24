@@ -1,1 +1,15 @@
-USER_SERVICE_URL = "http://localhost:8001"
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+USER_SERVICE_URL = os.getenv("USER_SERVICE_URL")
+HOTEL_SERVICE_URL = os.getenv("HOTEL_SERVICE_URL")
+BOOKING_SERVICE_URL = os.getenv("BOOKING_SERVICE_URL")
+PAYMENT_SERVICE_URL = os.getenv("PAYMENT_SERVICE_URL")
+NOTIFICATION_SERVICE_URL = os.getenv("NOTIFICATION_SERVICE_URL")
+FACE_SERVICE_URL = os.getenv("FACE_SERVICE_URL")
+
+SECRET_KEY = os.getenv("SECRET_KEY")
+ALGORITHM = os.getenv("ALGORITHM")
+RATE_LIMIT = int(os.getenv("RATE_LIMIT", 100))
