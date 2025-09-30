@@ -5,7 +5,11 @@ from app.routes import auth_routes
 # Create tables
 # Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="User Service with Auth", version="1.0.0")
+app = FastAPI(
+    title="User Service with Auth",
+    version="1.0.0",
+    description="User authentication service with JWT"
+)
 
 app.include_router(auth_routes.router)
 
