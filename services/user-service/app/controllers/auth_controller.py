@@ -1,40 +1,37 @@
 # app/controllers/auth_controller.py
 from sqlalchemy.orm import Session
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, BackgroundTasks
 from app.schemas.user_schema import UserCreate, UserLogin, UserResponse
 from app.schemas.token_schema import Token
-from app.services.auth_service import register_user, login_user
+from app.services.auth_service import (
+    register_user,
+    login_user,
+    verify_user_email,
+    resend_verification_email
+)
 from app.models.user import User
 
 
 class AuthController:
-    """
-    Controller layer to handle authentication logic
-    Separates route handling from business logic
-    """
     
     @staticmethod
-    def register_new_user(user: UserCreate, db: Session) -> UserResponse:
+    def register_new_user(
+        user: UserCreate,
+        db: Session,
+        background_tasks: BackgroundTasks
+    ) -> dict:
         """
-        Handle user registration
+        Register new user and send verification email
         
-        Args:
-            user: UserCreate schema with registration data
-            db: Database session
-            
-        Returns:
-            UserResponse: Registered user data
-            
-        Raises:
-            HTTPException: If registration fails
+        Returns success message instead of user data
         """
         try:
-            db_user = register_user(db, user)
-            return UserResponse(
-                id=db_user.id,
-                username=db_user.username,
-                email=db_user.email
-            )
+            db_user = register_user(db, user, background_tasks)
+            return {
+                "message": "User registered successfully! Please check your email to verify your account.",
+                "email": db_user.email,
+                "username": db_user.username
+            }
         except ValueError as e:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -47,41 +44,78 @@ class AuthController:
             )
     
     @staticmethod
+    def verify_email(token: str, db: Session, background_tasks: BackgroundTasks) -> dict:
+        """
+        Verify user email with token
+        """
+        try:
+            return verify_user_email(db, token, background_tasks)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An error occurred during email verification"
+            )
+    
+    @staticmethod
+    def resend_verification(email: str, db: Session, background_tasks: BackgroundTasks) -> dict:
+        """
+        Resend verification email to user
+        """
+        try:
+            return resend_verification_email(db, email, background_tasks)
+        except ValueError as e:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=str(e)
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An error occurred while resending verification email"
+            )
+    
+    @staticmethod
     def authenticate_user(user: UserLogin, db: Session) -> Token:
         """
-        Handle user login and return JWT token
+        Authenticate user and return JWT token
         
-        Args:
-            user: UserLogin schema with credentials
-            db: Database session
-            
-        Returns:
-            Token: JWT access token
-            
-        Raises:
-            HTTPException: If authentication fails
+        Raises HTTPException if email not verified
         """
-        token = login_user(db, user)
-        
-        if not token:
+        try:
+            token = login_user(db, user)
+            
+            if not token:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid email or password",
+                    headers={"WWW-Authenticate": "Bearer"}
+                )
+            
+            return Token(access_token=token, token_type="bearer")
+            
+        except ValueError as e:
+            # Handle unverified email error
             raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid email or password",
-                headers={"WWW-Authenticate": "Bearer"}
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=str(e)
             )
-        
-        return Token(access_token=token, token_type="bearer")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="An error occurred during authentication"
+            )
     
     @staticmethod
     def get_user_profile(current_user: User) -> UserResponse:
         """
-        Get current authenticated user's profile
-        
-        Args:
-            current_user: Authenticated user object
-            
-        Returns:
-            UserResponse: User profile data
+        Get current user profile
         """
         return UserResponse(
             id=current_user.id,

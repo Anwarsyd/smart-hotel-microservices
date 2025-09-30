@@ -1,5 +1,5 @@
 # app/routes/auth_routes.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from app.database.database import get_db
@@ -8,6 +8,7 @@ from app.schemas.token_schema import Token
 from app.controllers.auth_controller import AuthController
 from app.utils.jwt_handler import verify_token
 from app.models.user import User
+from pydantic import EmailStr
 
 
 security = HTTPBearer()
@@ -64,22 +65,65 @@ def get_current_user(
 # ============= Public Routes =============
 @router.post(
     "/register",
-    response_model=UserResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new user",
-    description="Create a new user account with email, username, and password"
+    description="Create a new user account and send verification email"
 )
-def register(user: UserCreate, db: Session = Depends(get_db)):
+def register(
+    user: UserCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     """
     **User Registration Endpoint**
     
-    - **username**: Unique username (3-50 characters)
+    - **username**: Unique username (3-50 characters, alphanumeric + underscore)
     - **email**: Valid email address
-    - **password**: Password (min 8 characters)
+    - **password**: Password (min 8 chars, must contain uppercase, lowercase, and digit)
     
-    Returns the created user details (without password)
+    Returns success message. User must verify email before logging in.
     """
-    return AuthController.register_new_user(user, db)
+    return AuthController.register_new_user(user, db, background_tasks)
+
+
+@router.get(
+    "/verify",
+    summary="Verify email address",
+    description="Verify user email with token from verification link"
+)
+def verify_email(
+    token: str = Query(..., description="Verification token from email"),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
+    db: Session = Depends(get_db)
+):
+    """
+    **Email Verification Endpoint**
+    
+    - **token**: Verification token from email link
+    
+    Verifies the user's email and sends welcome email.
+    """
+    return AuthController.verify_email(token, db, background_tasks)
+
+
+@router.post(
+    "/resend-verification",
+    summary="Resend verification email",
+    description="Request a new verification email"
+)
+def resend_verification(
+    email: EmailStr,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """
+    **Resend Verification Email**
+    
+    - **email**: Email address to resend verification to
+    
+    Generates new token and sends verification email.
+    """
+    return AuthController.resend_verification(email, db, background_tasks)
 
 
 @router.post(
@@ -92,10 +136,12 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     """
     **User Login Endpoint**
     
-    - **email**: Registered email address
+    - **email**: Registered and verified email address
     - **password**: User password
     
-    Returns a JWT access token valid for 30 minutes
+    Returns a JWT access token valid for 30 minutes.
+    
+    **Note**: Email must be verified before login.
     """
     return AuthController.authenticate_user(user, db)
 
@@ -134,5 +180,6 @@ def protected_route(current_user: User = Depends(get_current_user)):
         "message": "Access granted to protected resource",
         "user_id": current_user.id,
         "username": current_user.username,
-        "email": current_user.email
+        "email": current_user.email,
+        "is_verified": current_user.is_verified
     }
