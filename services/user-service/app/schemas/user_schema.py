@@ -1,7 +1,9 @@
 # app/schemas/user_schema.py
 from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
+from typing import Optional, Literal
 
+# Define allowed roles
+UserRoleType = Literal["admin", "staff", "customer"]
 
 class UserCreate(BaseModel):
     """Schema for user registration"""
@@ -20,6 +22,10 @@ class UserCreate(BaseModel):
         min_length=8,
         max_length=100,
         description="Password (minimum 8 characters)"
+    )
+    role: UserRoleType = Field(
+        default="customer",
+        description="User role (admin, staff, or customer)"
     )
     
     @field_validator('username')
@@ -60,15 +66,17 @@ class UserResponse(BaseModel):
     id: int
     username: str
     email: EmailStr
+    role: str
     
     class Config:
-        from_attributes = True  # For Pydantic v2
+        from_attributes = True
 
 
 class UserUpdate(BaseModel):
-    """Schema for updating user profile (optional for future use)"""
+    """Schema for updating user profile"""
     username: Optional[str] = Field(None, min_length=3, max_length=50)
     email: Optional[EmailStr] = None
+    role: Optional[UserRoleType] = None
     
     @field_validator('username')
     @classmethod

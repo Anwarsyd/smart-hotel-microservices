@@ -1,7 +1,14 @@
 # app/models/user.py
-from sqlalchemy import Column, Integer, String, Boolean, DateTime
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, Enum
 from datetime import datetime
 from app.database.database import Base
+import enum
+
+class UserRole(str, enum.Enum):
+    """User role enumeration"""
+    ADMIN = "admin"
+    STAFF = "staff"
+    CUSTOMER = "customer"
 
 class User(Base):
     __tablename__ = "users"  
@@ -10,6 +17,9 @@ class User(Base):
     username = Column(String, unique=True, index=True, nullable=False)
     email = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    
+    # Role field with default 'customer'
+    role = Column(String, default=UserRole.CUSTOMER.value, nullable=False)
     
     # Email verification fields
     is_verified = Column(Boolean, default=False, nullable=False)

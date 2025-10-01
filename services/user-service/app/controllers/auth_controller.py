@@ -30,7 +30,8 @@ class AuthController:
             return {
                 "message": "User registered successfully! Please check your email to verify your account.",
                 "email": db_user.email,
-                "username": db_user.username
+                "username": db_user.username,
+                "role": db_user.role
             }
         except ValueError as e:
             raise HTTPException(
@@ -120,5 +121,6 @@ class AuthController:
         return UserResponse(
             id=current_user.id,
             username=current_user.username,
-            email=current_user.email
+            email=current_user.email,
+            role=current_user.role  # FIX: Include role field
         )

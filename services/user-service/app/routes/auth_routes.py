@@ -7,6 +7,7 @@ from app.schemas.user_schema import UserCreate, UserLogin, UserResponse
 from app.schemas.token_schema import Token
 from app.controllers.auth_controller import AuthController
 from app.utils.jwt_handler import verify_token
+from app.utils.role_checker import require_admin, require_staff_or_admin
 from app.models.user import User
 from pydantic import EmailStr
 
@@ -80,6 +81,7 @@ def register(
     - **username**: Unique username (3-50 characters, alphanumeric + underscore)
     - **email**: Valid email address
     - **password**: Password (min 8 chars, must contain uppercase, lowercase, and digit)
+    - **role**: User role (admin, staff, or customer) - defaults to customer
     
     Returns success message. User must verify email before logging in.
     """
@@ -146,7 +148,7 @@ def login(user: UserLogin, db: Session = Depends(get_db)):
     return AuthController.authenticate_user(user, db)
 
 
-# ============= Protected Routes =============
+# ============= Protected Routes (Any Authenticated User) =============
 @router.get(
     "/me",
     response_model=UserResponse,
@@ -159,11 +161,120 @@ def get_current_user_info(current_user: User = Depends(get_current_user)):
     
     Requires: Bearer token in Authorization header
     
-    Returns current authenticated user's profile
+    Returns current authenticated user's profile including role
     """
     return AuthController.get_user_profile(current_user)
 
 
+# ============= Admin Only Routes =============
+@router.get(
+    "/admin/users",
+    summary="Get all users (Admin only)",
+    description="Retrieve list of all users - Admin access required"
+)
+def get_all_users(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    **Get All Users - Admin Only**
+    
+    Requires: Admin role
+    
+    Returns list of all registered users
+    """
+    # Check admin role
+    require_admin(current_user)
+    
+    users = db.query(User).all()
+    return {
+        "total_users": len(users),
+        "users": [
+            {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "role": user.role,
+                "is_verified": user.is_verified,
+                "created_at": user.created_at
+            }
+            for user in users
+        ]
+    }
+
+
+@router.delete(
+    "/admin/users/{user_id}",
+    summary="Delete user (Admin only)",
+    description="Delete a user by ID - Admin access required"
+)
+def delete_user(
+    user_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    **Delete User - Admin Only**
+    
+    Requires: Admin role
+    
+    Deletes a user from the system
+    """
+    # Check admin role
+    require_admin(current_user)
+    
+    user_to_delete = db.query(User).filter(User.id == user_id).first()
+    
+    if not user_to_delete:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    
+    # Prevent admin from deleting themselves
+    if user_to_delete.id == current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot delete your own account"
+        )
+    
+    db.delete(user_to_delete)
+    db.commit()
+    
+    return {"message": f"User {user_to_delete.username} deleted successfully"}
+
+
+# ============= Staff or Admin Routes =============
+@router.get(
+    "/staff/dashboard",
+    summary="Staff dashboard (Staff/Admin only)",
+    description="Access staff dashboard - Staff or Admin access required"
+)
+def staff_dashboard(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    **Staff Dashboard - Staff/Admin Only**
+    
+    Requires: Staff or Admin role
+    
+    Returns staff-specific information
+    """
+    # Check staff or admin role
+    require_staff_or_admin(current_user)
+    
+    return {
+        "message": "Welcome to Staff Dashboard",
+        "user": {
+            "username": current_user.username,
+            "role": current_user.role,
+            "email": current_user.email
+        },
+        "access_level": "staff" if current_user.role == "staff" else "admin"
+    }
+
+
+# ============= Example Protected Route =============
 @router.get(
     "/protected",
     summary="Protected route example",
@@ -173,13 +284,13 @@ def protected_route(current_user: User = Depends(get_current_user)):
     """
     **Protected Route Example**
     
-    This is a sample protected route to demonstrate JWT authentication.
-    Replace this with your actual business logic.
+    This is a sample protected route accessible by any authenticated user.
     """
     return {
         "message": "Access granted to protected resource",
         "user_id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
+        "role": current_user.role,
         "is_verified": current_user.is_verified
     }

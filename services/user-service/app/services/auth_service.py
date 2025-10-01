@@ -46,12 +46,13 @@ def register_user(db: Session, user: UserCreate, background_tasks: BackgroundTas
         verification_token = generate_verification_token()
         verification_expires = datetime.utcnow() + timedelta(hours=24)
         
-        # Create new user with hashed password
+        # Create new user with hashed password and role
         hashed_pwd = hash_password(user.password)
         db_user = User(
             username=user.username,
             email=user.email,
             hashed_password=hashed_pwd,
+            role=user.role,  # FIX: Save the role from user input
             is_verified=False,
             verification_token=verification_token,
             verification_token_expires=verification_expires
@@ -69,7 +70,7 @@ def register_user(db: Session, user: UserCreate, background_tasks: BackgroundTas
             verification_token
         )
         
-        logger.info(f"New user registered successfully: {db_user.email}")
+        logger.info(f"New user registered successfully: {db_user.email} with role: {db_user.role}")
         return db_user
         
     except IntegrityError as e:
@@ -138,7 +139,8 @@ def verify_user_email(db: Session, token: str, background_tasks: BackgroundTasks
             "user": {
                 "id": user.id,
                 "username": user.username,
-                "email": user.email
+                "email": user.email,
+                "role": user.role
             }
         }
         
@@ -236,15 +238,16 @@ def login_user(db: Session, user: UserLogin) -> str | None:
             logger.warning(f"Failed login attempt for user: {user.email}")
             return None
         
-        # Generate JWT token with user email as subject
+        # Generate JWT token with user email, role, and other info
         token_data = {
             "sub": db_user.email,
             "user_id": db_user.id,
-            "username": db_user.username
+            "username": db_user.username,
+            "role": db_user.role  # Include role in token
         }
         token = create_access_token(token_data)
         
-        logger.info(f"User logged in successfully: {db_user.email}")
+        logger.info(f"User logged in successfully: {db_user.email} (role: {db_user.role})")
         return token
         
     except ValueError:
